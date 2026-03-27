@@ -65,7 +65,78 @@ task StartWrite;
 endtask
 
 always_comb begin
-    // TODO
+    n_w = n_r;
+    d_w = d_r;
+    enc_w = enc_r;
+    dec_w = dec_r;
+    avm_address_w = avm_address_r;
+    avm_read_w = avm_read_r;
+    avm_write_w = avm_write_r;
+    state_w = state_r;
+    bytes_counter_w = bytes_counter_r;
+    rsa_start_w = rsa_start_r;
+
+    if (!avm_waitrequest) begin
+        case (state_r)
+            S_GET_KEY: begin
+                if (avm_address_r == STATUS_BASE) begin
+                    if (avm_readdata[RX_OK_BIT]) begin
+                        StartRead(RX_BASE);
+                    end
+                end else if (avm_address_r == RX_BASE) begin
+                    if (bytes_counter_r >= 32) begin
+                        n_w = {n_r[247:0], avm_readdata[7:0]};
+                    end else begin
+                        d_w = {d_r[247:0], avm_readdata[7:0]};
+                    end
+                    bytes_counter_w = bytes_counter_r - 1;
+                    StartRead(STATUS_BASE);
+                    if (bytes_counter_r == 0) begin
+                        state_w = S_GET_DATA;
+                        bytes_counter_w = 31;
+                    end
+                end
+            end
+            S_GET_DATA: begin
+                if (avm_address_r == STATUS_BASE) begin
+                    if (avm_readdata[RX_OK_BIT]) begin
+                        StartRead(RX_BASE);
+                    end
+                end else if (avm_address_r == RX_BASE) begin
+                    enc_w = {enc_r[247:0], avm_readdata[7:0]};
+                    bytes_counter_w = bytes_counter_r - 1;
+                    StartRead(STATUS_BASE);
+                    if (bytes_counter_r == 0) begin
+                        state_w = S_WAIT_CALCULATE;
+                        bytes_counter_w = 30;
+                        rsa_start_w = 1;
+                    end
+                end
+            end
+            S_WAIT_CALCULATE: begin
+                rsa_start_w = 0;
+                if (rsa_finished) begin
+                    state_w = S_SEND_DATA;
+                    dec_w = rsa_dec;
+                end
+            end
+            S_SEND_DATA: begin
+                if (avm_address_r == STATUS_BASE) begin
+                    if (avm_readdata[TX_OK_BIT]) begin
+                        StartWrite(TX_BASE);
+                    end
+                end else if (avm_address_r == TX_BASE) begin
+                    dec_w = {dec_r[247:0], 8'd0};
+                    bytes_counter_w = bytes_counter_r - 1;
+                    StartRead(STATUS_BASE);
+                    if (bytes_counter_r == 0) begin
+                        state_w = S_GET_DATA;
+                        bytes_counter_w = 31;
+                    end
+                end
+            end
+        endcase 
+    end
 end
 
 always_ff @(posedge avm_clk or posedge avm_rst) begin
