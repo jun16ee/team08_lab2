@@ -113,13 +113,6 @@ always_comb begin
                     end
                 end
             end
-            S_WAIT_CALCULATE: begin
-                rsa_start_w = 0;
-                if (rsa_finished) begin
-                    state_w = S_SEND_DATA;
-                    dec_w = rsa_dec;
-                end
-            end
             S_SEND_DATA: begin
                 if (avm_address_r == STATUS_BASE) begin
                     if (avm_readdata[TX_OK_BIT]) begin
@@ -136,6 +129,14 @@ always_comb begin
                 end
             end
         endcase 
+    end
+
+    if (state_r == S_WAIT_CALCULATE) begin
+        rsa_start_w = 0;
+        if (rsa_finished) begin
+            state_w = S_SEND_DATA;
+            dec_w = rsa_dec;
+        end
     end
 end
 
