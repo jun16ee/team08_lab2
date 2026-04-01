@@ -1,11 +1,10 @@
+ Code
 # =========================
-# 1. VS Code 
-# =========================
-.vscode/sftp.json
 .vscode/
+.vscode/sftp.json
 
 # =========================
-# 2. Python 
+# 2. Python
 # =========================
 venv/
 .venv/
@@ -15,7 +14,7 @@ __pycache__/
 .env
 
 # =========================
-# 3. C/C++ 
+# 3. C/C++
 # =========================
 *.o
 *.out
@@ -28,5 +27,45 @@ build/
 # =========================
 # 4. System Files
 # =========================
-.DS_Store       # Mac 系統產生的隱藏檔
-Thumbs.db       # Windows 系統產生的縮圖快取
+.DS_Store
+Thumbs.db
+
+# =========================
+# 5. Verilog / EDA (IMPORTANT)
+# =========================
+
+# VCS build outputs
+simv
+simv.daidir/
+csrc/
+ucli.key
+*.log
+*.vpd
+*.vcd
+*.fsdb
+
+# waveform / debug
+DVEfiles/
+verdiLog/
+novas.conf
+novas.rc
+
+# temporary / compilation
+*.daidir/
+*.key
+
+# coverage / misc
+urgReport/
+*.urg
+
+# =========================
+# 6. Optional: keep TB but ignore junk inside
+# =========================
+# (you DO want to keep .sv testbenches)
+# so do NOT ignore *.sv
+
+# but ignore generated folders inside tb_verilog
+src/tb_verilog/csrc/
+src/tb_verilog/simv*
+src/tb_verilog/*.daidir/
+src/tb_verilog/ucli.key
