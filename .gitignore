@@ -19,7 +19,7 @@ __pycache__/
 *.o
 *.out
 *.exe
-*.bin
+# *.bin
 *.elf
 build/
 .pio/
