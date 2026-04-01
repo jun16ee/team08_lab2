@@ -1,33 +1,39 @@
 module Rsa256Core (
-	input          i_clk,
-	input          i_rst,
-	input          i_start,
-	input  [255:0] i_a, // 密文
-	input  [255:0] i_d, // 私鑰
-	input  [255:0] i_n, // 模數
-	output [255:0] o_a_pow_d, // 明文
-	output         o_finished
+	input                i_clk,
+	input                i_rst,
+	input                i_start,
+	input        [255:0] i_a, // 密文
+	input        [255:0] i_d, // 私鑰
+	input        [255:0] i_n, // 模數
+	output logic [255:0] o_a_pow_d, // 明文
+	output logic         o_finished
 );
-    typedef enum logic [1:0] {
+    typedef enum logic [2:0] {
         IDLE,
         PREP,
-        MONT,
-        CALC
+        MONT_START,
+        MONT_WAIT,
+        CALC,
+        DONE
     } state_t;
 
     state_t state_r, state_w;
     logic [255:0] m_r, m_w, t_r, t_w;
+    logic [255:0] prep_result, mont1_result, mont2_result;
     logic prep_start, prep_finished;
     logic mont1_start, mont1_finished;
     logic mont2_start, mont2_finished;
-    logic [7:0] calc_i_r, calc_i_w;
-    ModuloProduct u_prep (.N(i_n), .y(i_a), .i_start(prep_start), .o_finished(prep_finished), .o_mod_pro(t_w));
-    // m * t
-    MontAlg       u1_mont(.N(i_n), .a(t_r), .b(m_r), .i_start(mont1_start), .o_finished(mont1_finished), .o_mont_alg(m_w));
-    // t * t
-    MontAlg       u2_mont(.N(i_n), .a(t_r), .b(t_r), .i_start(mont2_start), .o_finished(mont2_finished), .o_mont_alg(t_w));
+    logic [2:0] done_cnt_r, done_cnt_w;
 
-    // ===================== CS =====================
+    logic [8:0] bit_idx_r, bit_idx_w;
+    ModuloProduct u_prep (.i_clk(i_clk), .i_rst(i_rst), .N(i_n), .y(i_a), .i_start(prep_start), .o_finished(prep_finished), .o_mod_pro(prep_result));
+    // m * t
+    MontAlg       u1_mont(.i_clk(i_clk), .i_rst(i_rst), .N(i_n), .a(t_r), .b(m_r), .i_start(mont1_start), .o_finished(mont1_finished), .o_mont_alg(mont1_result));
+    // t * t
+    MontAlg       u2_mont(.i_clk(i_clk), .i_rst(i_rst), .N(i_n), .a(t_r), .b(t_r), .i_start(mont2_start), .o_finished(mont2_finished), .o_mont_alg(mont2_result));
+    // ===================== FSM =====================
+
+    // --------------------- CS ---------------------
     always_ff @(posedge i_clk or posedge i_rst) begin
         if(i_rst) begin
             state_r <= IDLE;
@@ -36,26 +42,16 @@ module Rsa256Core (
         end
     end
 
-    // ===================== SEQ =====================
-    always_ff @(posedge i_clk or posedge i_rst) begin
-        if(i_rst) begin
-            m_r <= 256'b0;
-            t_r <= 256'b0;
-            calc_i_r <= 8'b0;
-            
-        end else begin
-            if (i_d[calc_i_r]) begin
-                m_r <= m_w;
-            end
-            t_r <= t_w;
-            calc_i_r <= calc_i_w;
-        end
-    end
-
-    // ===================== NL =====================
+    // --------------------- NL ---------------------
     always_comb begin
         state_w = state_r;
+
         prep_start = 1'b0;
+        mont1_start = 1'b0;
+        mont2_start = 1'b0;
+        o_a_pow_d = 256'b0;
+        o_finished = 1'b0;
+
         case (state_r)
             IDLE: begin
                 if(i_start) begin
@@ -66,26 +62,39 @@ module Rsa256Core (
 
             PREP: begin
                 if(prep_finished) begin
-                    state_w = MONT;
-                    mont1_start = 1'b1;
-                    mont2_start = 1'b1;
+                    state_w = MONT_START;
                 end
             end
 
-            MONT: begin
+            MONT_START: begin
+                mont1_start = 1'b1;
+                mont2_start = 1'b1;
+                state_w = MONT_WAIT;
+            end
+
+            MONT_WAIT: begin
                 if(mont1_finished && mont2_finished) begin
                     state_w = CALC;
                 end
             end
 
             CALC: begin
-                if(calc_i_r == 255) begin
-                    state_w = IDLE;
-                end else begin
-                    calc_i_w = calc_i_r + 1;
-                    state_w = MONT;
-                end
+                if(bit_idx_r[8]) begin
+                    o_a_pow_d = m_r;
+                    o_finished = 1'b1;
+                    state_w = DONE;
 
+                end else begin
+                    state_w = MONT_START;
+                end
+            end
+
+            DONE: begin
+                o_a_pow_d = m_r;
+                o_finished = 1'b1;
+                if(done_cnt_r == 7) begin
+                    state_w = IDLE;
+                end
             end
 
             default: begin
@@ -95,31 +104,164 @@ module Rsa256Core (
         endcase
     end
 
-    // ===================== OL =====================
-    always_comb begin
-        o_a_pow_d  =  256'b0;
-        o_finished = 1'b0;
 
+    // ===================== Datapath =====================
+
+    // --------------------- SEQ ---------------------
+    always_ff @(posedge i_clk or posedge i_rst) begin
+        if(i_rst) begin
+            m_r <= 256'b1;
+            t_r <= 256'b0;
+            bit_idx_r <= 9'b0;
+            done_cnt_r <= 3'b0;
+            
+        end else begin
+            t_r <= t_w;
+            m_r <= m_w;
+            bit_idx_r <= bit_idx_w;
+            done_cnt_r <= done_cnt_w;
+        end
+    end
+
+    // --------------------- COMB ---------------------
+    always_comb begin
+        m_w = m_r;
+        t_w = t_r;
+        bit_idx_w = bit_idx_r;
+        done_cnt_w = done_cnt_r;
+
+        case(state_r)
+            IDLE: begin
+                m_w = 256'b1;
+                t_w = 256'b0;
+                bit_idx_w = 9'b0;
+                done_cnt_w = 3'b0;
+            end
+
+            PREP: begin
+                if(prep_finished) begin
+                    t_w = prep_result;
+                end
+            end
+
+            MONT_START: begin
+                // do nothing, wait for mont results
+            end
+
+            MONT_WAIT: begin
+                // do nothing, wait for mont results
+            end
+
+            CALC: begin
+                if(!bit_idx_r[8]) begin
+                    m_w = (i_d[bit_idx_r] == 1'b1 ? mont1_result : m_r);
+                    t_w = mont2_result;
+                    bit_idx_w = bit_idx_r + 1;
+                end
+            end
+
+            DONE: begin
+               if(done_cnt_r == 7) begin
+                    done_cnt_w = 3'b0;
+                end else begin
+                    done_cnt_w = done_cnt_r + 1;
+                end
+            end
+
+            default: begin
+                m_w = m_r;
+                t_w = t_r;
+            end
+        endcase
     end
 
 endmodule
 
-
+// calculate: y * 2^256 mod N
 module ModuloProduct (
+    input  logic i_clk,
+    input  logic i_rst,
     input  logic [255:0] N,
     input  logic [255:0] y,
     input  logic i_start,
     output logic o_finished,
     output logic [255:0] o_mod_pro
 );
+    logic [255:0] t_r, t_w, m_r, m_w;
+    logic o_finished_w;
+    logic [255:0] o_mod_pro_w;
+    logic [8:0] bit_idx_r, bit_idx_w;
+    logic [256:0] sum_mt, sum_tt; // for addition, one more bit for carry
+    // ============== COMB ==============
+    always_comb begin
+        t_w = t_r;
+        m_w = m_r;
+        bit_idx_w = bit_idx_r;
+        o_finished_w = o_finished;
+        o_mod_pro_w = o_mod_pro;
+        sum_mt = 257'b0;
+        sum_tt = 257'b0;
+
+        if(i_start) begin
+            t_w = y;
+            m_w = 256'b0;
+            bit_idx_w = 9'b0;
+            o_finished_w = 1'b0;
+            o_mod_pro_w = 256'b0;
+        end else begin
+            if(bit_idx_r == 9'd256) begin
+                // the 256-th bit is 1
+                sum_mt = {1'b0, m_r} + {1'b0, t_r};
+                if(sum_mt >= {1'b0, N}) begin
+                    m_w = (sum_mt - {1'b0, N})[255:0];
+                end else begin
+                    m_w = sum_mt[255:0];
+                end
+                o_finished_w = 1'b1;
+                o_mod_pro_w = m_w;
+            end
+
+            // t = t * 2 mod N
+            sum_tt = ({1'b0, t_r} << 1);
+            if(sum_tt >= {1'b0, N}) begin
+                t_w = (sum_tt - {1'b0, N})[255:0];
+            end else begin
+                t_w = sum_tt[255:0];
+            end
+
+            bit_idx_w = bit_idx_r + 1;
+
+
+        end
+    end
+
+
+    // ============== SEQ ===============
+    always_ff @(posedge i_clk or posedge i_rst) begin
+        if(i_rst) begin
+            o_finished <= 1'b0;
+            o_mod_pro <= 256'b0;
+            t_r <= 256'b0;
+            m_r <= 256'b0;
+            bit_idx_r <= 9'b0;
+        end else begin
+            o_finished <= o_finished_w;
+            o_mod_pro <= o_mod_pro_w;
+            t_r <= t_w;
+            m_r <= m_w;
+            bit_idx_r <= bit_idx_w;
+        end
+    end
 
 endmodule
 
 
 module MontAlg (
+    input logic i_clk,
+    input logic i_rst,
     input logic [255:0] N,
     input logic [255:0] a,
-    input logic [255:0] b
+    input logic [255:0] b,
     input logic i_start,
     output logic o_finished,
     output logic [255:0] o_mont_alg
