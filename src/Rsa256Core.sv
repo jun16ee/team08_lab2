@@ -187,15 +187,14 @@ module ModuloProduct (
     output logic o_finished,
     output logic [255:0] o_mod_pro
 );
-    logic [255:0] t_r, t_w, m_r, m_w;
+    logic [255:0] t_r, t_w;
     logic o_finished_w;
     logic [255:0] o_mod_pro_w;
     logic [8:0] bit_idx_r, bit_idx_w;
-    logic [256:0] sum_mt, sum_tt; // for addition, one more bit for carry
+    logic [256:0] sum_tt; // for addition, one more bit for carry
     // ============== COMB ==============
     always_comb begin
         t_w = t_r;
-        m_w = m_r;
         bit_idx_w = bit_idx_r;
         o_finished_w = o_finished;
         o_mod_pro_w = o_mod_pro;
@@ -204,21 +203,15 @@ module ModuloProduct (
 
         if(i_start) begin
             t_w = y;
-            m_w = 256'b0;
             bit_idx_w = 9'b0;
             o_finished_w = 1'b0;
             o_mod_pro_w = 256'b0;
         end else begin
             if(bit_idx_r == 9'd256) begin
                 // the 256-th bit is 1
-                sum_mt = {1'b0, m_r} + {1'b0, t_r};
-                if(sum_mt >= {1'b0, N}) begin
-                    m_w = (sum_mt - {1'b0, N})[255:0];
-                end else begin
-                    m_w = sum_mt[255:0];
-                end
+                
                 o_finished_w = 1'b1;
-                o_mod_pro_w = m_w;
+                o_mod_pro_w = t_r;
             end
 
             // t = t * 2 mod N
@@ -242,13 +235,11 @@ module ModuloProduct (
             o_finished <= 1'b0;
             o_mod_pro <= 256'b0;
             t_r <= 256'b0;
-            m_r <= 256'b0;
             bit_idx_r <= 9'b0;
         end else begin
             o_finished <= o_finished_w;
             o_mod_pro <= o_mod_pro_w;
             t_r <= t_w;
-            m_r <= m_w;
             bit_idx_r <= bit_idx_w;
         end
     end
