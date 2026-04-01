@@ -191,7 +191,7 @@ module ModuloProduct (
     logic o_finished_w;
     logic [255:0] o_mod_pro_w;
     logic [8:0] bit_idx_r, bit_idx_w;
-    logic [256:0] sum_tt; // for addition, one more bit for carry
+    logic [256:0] sum_tt, diff_tt; // for addition, one more bit for carry
     // ============== COMB ==============
     always_comb begin
         t_w = t_r;
@@ -199,6 +199,7 @@ module ModuloProduct (
         o_finished_w = 1'b0;
         o_mod_pro_w = o_mod_pro;
         sum_tt = 257'b0;
+        diff_tt = 257'b0;
 
         if(i_start) begin
             t_w = y;
@@ -209,7 +210,8 @@ module ModuloProduct (
             // t = t * 2 mod N
             sum_tt = ({1'b0, t_r} << 1);
             if(sum_tt >= {1'b0, N}) begin
-                t_w = (sum_tt - {1'b0, N})[255:0];
+                diff_tt = (sum_tt - {1'b0, N});
+                t_w = diff_tt[255:0];
             end else begin
                 t_w = sum_tt[255:0];
             end
