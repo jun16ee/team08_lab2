@@ -216,7 +216,7 @@ module ModuloProduct (
                 t_w = sum_tt[255:0];
             end
 
-            if(bit_idx_r < 9'd255) begin
+            if(bit_idx_r < 9'd256) begin
                 bit_idx_w = bit_idx_r + 1;
             end
 
