@@ -196,9 +196,8 @@ module ModuloProduct (
     always_comb begin
         t_w = t_r;
         bit_idx_w = bit_idx_r;
-        o_finished_w = o_finished;
+        o_finished_w = 1'b0;
         o_mod_pro_w = o_mod_pro;
-        sum_mt = 257'b0;
         sum_tt = 257'b0;
 
         if(i_start) begin
@@ -207,13 +206,6 @@ module ModuloProduct (
             o_finished_w = 1'b0;
             o_mod_pro_w = 256'b0;
         end else begin
-            if(bit_idx_r == 9'd256) begin
-                // the 256-th bit is 1
-                
-                o_finished_w = 1'b1;
-                o_mod_pro_w = t_r;
-            end
-
             // t = t * 2 mod N
             sum_tt = ({1'b0, t_r} << 1);
             if(sum_tt >= {1'b0, N}) begin
@@ -222,9 +214,15 @@ module ModuloProduct (
                 t_w = sum_tt[255:0];
             end
 
-            bit_idx_w = bit_idx_r + 1;
+            if(bit_idx_r < 9'd255) begin
+                bit_idx_w = bit_idx_r + 1;
+            end
 
-
+            if(bit_idx_r == 9'd255) begin
+                // the 256-th doubling
+                o_finished_w = 1'b1;
+                o_mod_pro_w = t_w;
+            end
         end
     end
 
