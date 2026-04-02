@@ -81,7 +81,9 @@ module Rsa256Core (
                 if(bit_idx_r == 9'd255) begin
                     state_w = DONE;
                 end else begin
-                    state_w = MONT_START;
+                    mont1_start = 1'b1;
+                    mont2_start = 1'b1;
+                    state_w = MONT_WAIT;
                 end
             end
 
