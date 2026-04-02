@@ -23,7 +23,8 @@ module Rsa256Core (
     logic prep_start, prep_finished;
     logic mont1_start, mont1_finished;
     logic mont2_start, mont2_finished;
-    logic [2:0] done_cnt_r, done_cnt_w;
+    logic [255:0] o_a_pow_d_w;
+    logic o_finished_w;
 
     logic [8:0] bit_idx_r, bit_idx_w;
     ModuloProduct u_prep (.i_clk(i_clk), .i_rst(i_rst), .N(i_n), .y(i_a), .i_start(prep_start), .o_finished(prep_finished), .o_mod_pro(prep_result));
@@ -49,8 +50,6 @@ module Rsa256Core (
         prep_start = 1'b0;
         mont1_start = 1'b0;
         mont2_start = 1'b0;
-        o_a_pow_d = 256'b0;
-        o_finished = 1'b0;
 
         case (state_r)
             IDLE: begin
@@ -79,7 +78,7 @@ module Rsa256Core (
             end
 
             CALC: begin
-                if(bit_idx_r == 9'd256) begin
+                if(bit_idx_r == 9'd255) begin
                     state_w = DONE;
                 end else begin
                     state_w = MONT_START;
@@ -87,11 +86,7 @@ module Rsa256Core (
             end
 
             DONE: begin
-                o_a_pow_d = m_r;
-                o_finished = 1'b1;
-                if(done_cnt_r == 7) begin
-                    state_w = IDLE;
-                end
+                state_w = IDLE;
             end
 
             default: begin
@@ -110,13 +105,15 @@ module Rsa256Core (
             m_r <= 256'b1;
             t_r <= 256'b0;
             bit_idx_r <= 9'b0;
-            done_cnt_r <= 3'b0;
+            o_a_pow_d <= 256'b0;
+            o_finished <= 1'b0;
             
         end else begin
             t_r <= t_w;
             m_r <= m_w;
             bit_idx_r <= bit_idx_w;
-            done_cnt_r <= done_cnt_w;
+            o_a_pow_d <= o_a_pow_d_w;
+            o_finished <= o_finished_w;
         end
     end
 
@@ -125,14 +122,16 @@ module Rsa256Core (
         m_w = m_r;
         t_w = t_r;
         bit_idx_w = bit_idx_r;
-        done_cnt_w = done_cnt_r;
+        o_a_pow_d_w = o_a_pow_d;
+        o_finished_w = o_finished;
 
         case(state_r)
             IDLE: begin
                 m_w = 256'b1;
                 t_w = 256'b0;
                 bit_idx_w = 9'b0;
-                done_cnt_w = 3'b0;
+                o_a_pow_d_w = 256'b0;
+                o_finished_w = 1'b0;
             end
 
             PREP: begin
@@ -150,19 +149,21 @@ module Rsa256Core (
             end
 
             CALC: begin
-                if(bit_idx_r != 9'd256) begin
-                    m_w = (i_d[bit_idx_r] == 1'b1 ? mont1_result : m_r);
-                    t_w = mont2_result;
-                    bit_idx_w = bit_idx_r + 1;
-                end
+                
+
+                m_w = (i_d[bit_idx_r] == 1'b1 ? mont1_result : m_r);
+                t_w = mont2_result;
+                bit_idx_w = bit_idx_r + 1;
+
+                if(bit_idx_r == 9'd255) begin
+                    o_a_pow_d_w = m_w;
+                    o_finished_w = 1'b1;
+                end 
+            
             end
 
             DONE: begin
-               if(done_cnt_r == 7) begin
-                    done_cnt_w = 3'b0;
-                end else begin
-                    done_cnt_w = done_cnt_r + 1;
-                end
+               // do nothing
             end
 
             default: begin
@@ -173,6 +174,18 @@ module Rsa256Core (
     end
 
 endmodule
+
+
+
+
+
+
+
+
+
+
+
+
 
 // calculate: y * 2^256 mod N
 module ModuloProduct (
