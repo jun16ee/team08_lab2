@@ -154,7 +154,7 @@ module Rsa256Core (
 
             CALC: begin
                 if(!bit_idx_r[8]) begin
-                    m_w = (i_d[bit_idx_r] == 1'b1 ? mont1_result : m_r);
+                    m_w = (i_d[bit_idx_r] == 1'b1) ? mont1_result : m_r;
                     t_w = mont2_result;
                     bit_idx_w = bit_idx_r + 1;
                 end
