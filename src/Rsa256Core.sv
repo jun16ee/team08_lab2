@@ -290,7 +290,7 @@ module MontAlg (
                     sum_mN = sum_mb;
                 end
                 sum_mN = sum_mN >> 1;
-                m_w = sum_mN[255:0];              
+                m_w = sum_mN[256:0];              
                 bit_idx_w = bit_idx_r + 1;
 
 
@@ -301,7 +301,7 @@ module MontAlg (
                     m_w = m_r;
                 end
                 o_finished_w = 1'b1;
-                o_mont_alg_w = m_w;
+                o_mont_alg_w = m_w[255:0];
                 bit_idx_w = bit_idx_r + 1;
             end
         end
