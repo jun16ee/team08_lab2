@@ -79,11 +79,8 @@ module Rsa256Core (
             end
 
             CALC: begin
-                if(bit_idx_r[8]) begin
-                    o_a_pow_d = m_r;
-                    o_finished = 1'b1;
+                if(bit_idx_r == 9'd256) begin
                     state_w = DONE;
-
                 end else begin
                     state_w = MONT_START;
                 end
@@ -153,7 +150,7 @@ module Rsa256Core (
             end
 
             CALC: begin
-                if(!bit_idx_r[8]) begin
+                if(bit_idx_r != 9'd256) begin
                     m_w = (i_d[bit_idx_r] == 1'b1 ? mont1_result : m_r);
                     t_w = mont2_result;
                     bit_idx_w = bit_idx_r + 1;
