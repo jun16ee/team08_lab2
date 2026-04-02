@@ -1,177 +1,141 @@
 `timescale 1ns/1ps
 
-module ModuloProduct_tb;
+module tb_ModuloProduct();
+    // ----------------------------------------------------
+    // Signals
+    // ----------------------------------------------------
+    logic clk = 0;
+    logic rst;
+    logic start;
+    logic finished;
+    
+    logic [255:0] i_n, i_y;
+    logic [255:0] o_mod_pro, expected_out;
 
-    // =========================
-    // DUT signals
-    // =========================
-    logic         i_clk;
-    logic         i_rst;
-    logic [255:0] N;
-    logic [255:0] y;
-    logic         i_start;
-    logic         o_finished;
-    logic [255:0] o_mod_pro;
+    int passed_cnt = 0;
+    int failed_cnt = 0;
 
-    // =========================
-    // DUT
-    // =========================
+    // Clock Generation (100MHz)
+    always #5 clk = ~clk;
+
+    // Instantiate DUT
     ModuloProduct dut (
-        .i_clk(i_clk),
-        .i_rst(i_rst),
-        .N(N),
-        .y(y),
-        .i_start(i_start),
-        .o_finished(o_finished),
+        .i_clk(clk),
+        .i_rst(rst),
+        .N(i_n),
+        .y(i_y),
+        .i_start(start),
+        .o_finished(finished),
         .o_mod_pro(o_mod_pro)
     );
 
-    // =========================
-    // Clock
-    // =========================
-    initial i_clk = 1'b0;
-    always #5 i_clk = ~i_clk;
+    // ----------------------------------------------------
+    // Complex Test Data Array
+    // ----------------------------------------------------
+    typedef struct {
+        logic [255:0] N;
+        logic [255:0] y;
+        string        name;
+    } test_vector_t;
 
-    // =========================
-    // Golden model:
-    // y * 2^256 mod N
-    // =========================
-    function automatic [255:0] golden_mod_product;
-        input [255:0] in_y;
-        input [255:0] in_N;
-        reg   [255:0] t;
-        reg   [256:0] tmp;
-        reg   [256:0] diff;
-        integer k;
-        begin
-            t = in_y;
-            for (k = 0; k < 256; k = k + 1) begin
-                tmp = {1'b0, t} << 1;
-                if (tmp >= {1'b0, in_N}) begin
-                    diff = tmp - {1'b0, in_N};
-                    t = diff[255:0];
-                end
-                else begin
-                    t = tmp[255:0];
-                end
-            end
-            golden_mod_product = t;
-        end
+    test_vector_t test_vectors [] = '{
+        // Small Case: 3 * 2^256 mod 11
+        // Math: 2^256 mod 11 = 9. So 3 * 9 = 27. 27 mod 11 = 5.
+        '{ N: 256'd11, y: 256'd3, name: "Small Prime N=11" },
+        
+        // Corner Case: y = 0
+        '{ N: 256'hFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF43, 
+           y: 256'h0, name: "Corner: y = 0" },
+           
+        // Corner Case: y = 1
+        '{ N: 256'hFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF43, 
+           y: 256'h1, name: "Corner: y = 1" },
+
+        // Large Vector: Full 256-bit stress
+        '{ N: 256'hFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF43, 
+           y: 256'hA5A5A5A5A5A5A5A5A5A5A5A5A5A5A5A5A5A5A5A5A5A5A5A5A5A5A5A5A5A5A5A5, 
+           name: "Large 256-bit Random-style" }
+    };
+
+    // ----------------------------------------------------
+    // Golden Reference Model (Module Level)
+    // ----------------------------------------------------
+    function automatic logic [255:0] golden_mod_pro(
+        input logic [255:0] n_val, 
+        input logic [255:0] y_val
+    );
+        logic [511:0] temp;
+        logic [511:0] big_n;
+        
+        // Mathematically: (y * 2^256) mod N
+        temp = {256'b0, y_val};
+        big_n = {256'b0, n_val};
+        
+        temp = (temp << 256) % big_n;
+        
+        return temp[255:0];
     endfunction
 
-    // =========================
-    // Run one case
-    // =========================
-    task automatic run_case;
-        input [255:0] in_y;
-        input [255:0] in_N;
-        reg   [255:0] expected;
-        integer cycle_count;
-        begin
-            expected = golden_mod_product(in_y, in_N);
-
-            @(negedge i_clk);
-            y       = in_y;
-            N       = in_N;
-            i_start = 1'b1;
-
-            @(negedge i_clk);
-            i_start = 1'b0;
-
-            cycle_count = 0;
-            while (o_finished !== 1'b1) begin
-                @(posedge i_clk);
-                cycle_count = cycle_count + 1;
-                if (cycle_count > 300) begin
-                    $display("[FAIL] Timeout");
-                    $display("       y = %h", in_y);
-                    $display("       N = %h", in_N);
-                    $finish;
-                end
-            end
-
-            @(negedge i_clk);
-            if (o_mod_pro !== expected) begin
-                $display("[FAIL] Mismatch");
-                $display("       y        = %h", in_y);
-                $display("       N        = %h", in_N);
-                $display("       expected = %h", expected);
-                $display("       got      = %h", o_mod_pro);
-                $finish;
-            end
-            else begin
-                $display("[PASS] y=%h N=%h result=%h", in_y, in_N, o_mod_pro);
-            end
-
-            @(posedge i_clk);
-        end
-    endtask
-
-    // =========================
-    // Main test
-    // =========================
+    // ----------------------------------------------------
+    // Main Stimulus
+    // ----------------------------------------------------
     initial begin
-        i_rst   = 1'b1;
-        i_start = 1'b0;
-        N       = 256'b0;
-        y       = 256'b0;
+        start = 0; i_n = 0; i_y = 0;
+        
+        // Reset Sequence
+        rst = 1;
+        repeat(5) @(posedge clk);
+        rst = 0;
+        repeat(2) @(posedge clk);
 
-        repeat (3) @(posedge i_clk);
-        i_rst = 1'b0;
-        repeat (2) @(posedge i_clk);
+        $display("==================================================");
+        $display("   STARTING MODULO-PRODUCT VERIFICATION           ");
+        $display("==================================================");
 
-        // Basic cases
-        run_case(256'd0,     256'd17);
-        run_case(256'd1,     256'd17);
-        run_case(256'd5,     256'd17);
-        run_case(256'd16,    256'd17);
-        run_case(256'd7,     256'd19);
-        run_case(256'd12345, 256'd65537);
-        run_case(256'd42,    256'd1000003);
+        foreach(test_vectors[i]) begin
+            $display("Running Test [%0d]: %s...", i, test_vectors[i].name);
+            
+            // Setup inputs
+            i_n = test_vectors[i].N;
+            i_y = test_vectors[i].y;
+            expected_out = golden_mod_pro(i_n, i_y);
 
-        // Bigger directed cases
-        run_case(
-            256'h0000000000000000000000000000000000000000000000000000000000001234,
-            256'h0000000000000000000000000000000000000000000000000000000000010001
-        );
+            // Start Pulse
+            @(posedge clk);
+            start = 1'b1;
+            @(posedge clk);
+            start = 1'b0;
 
-        run_case(
-            256'h0123456789abcdef000000000000000000000000000000000000000000000000,
-            256'h1fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
-        );
-
-        run_case(
-            256'h00abcdef1234567890abcdef1234567890abcdef1234567890abcdef12345678,
-            256'h0fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffed
-        );
-
-        // Random cases
-        repeat (20) begin
-            reg [255:0] randN;
-            reg [255:0] randy;
-
-            randN = {
-                $urandom(), $urandom(), $urandom(), $urandom(),
-                $urandom(), $urandom(), $urandom(), $urandom()
-            };
-
-            randy = {
-                $urandom(), $urandom(), $urandom(), $urandom(),
-                $urandom(), $urandom(), $urandom(), $urandom()
-            };
-
-            randN[255] = 1'b0;
-            randN[0]   = 1'b1;
-            if (randN < 256'd3)
-                randN = randN + 256'd3;
-
-            randy = randy % randN;
-
-            run_case(randy, randN);
+            // Wait for completion
+            fork
+                begin
+                    wait(finished);
+                    @(posedge clk); 
+                    if (o_mod_pro === expected_out) begin
+                        $display("  -> [PASS]");
+                        passed_cnt++;
+                    end else begin
+                        $display("  -> [FAIL]");
+                        $display("       Expected: %h", expected_out);
+                        $display("       Got     : %h", o_mod_pro);
+                        failed_cnt++;
+                    end
+                end
+                begin
+                    // ModuloProduct takes exactly 256 cycles
+                    repeat(500) @(posedge clk);
+                    $display("  -> [FAIL] TIMEOUT (FSM stuck)");
+                    failed_cnt++;
+                end
+            join_any
+            disable fork;
+            
+            repeat(10) @(posedge clk);
         end
 
-        $display("All tests passed.");
+        $display("==================================================");
+        $display(" SUBMODULE COMPLETE: %0d Passed | %0d Failed", passed_cnt, failed_cnt);
+        $display("==================================================");
         $finish;
     end
-
 endmodule

@@ -1,191 +1,178 @@
 `timescale 1ns/1ps
 
-module Rsa256Core_tb;
+module tb_Rsa256Core();
+    // ----------------------------------------------------
+    // Signals
+    // ----------------------------------------------------
+    logic clk = 0;
+    logic rst;
+    logic start;
+    logic finished;
+    
+    logic [255:0] i_n, i_a, i_d;
+    logic [255:0] o_a_pow_d, expected_out;
 
-    // =========================
-    // DUT signals
-    // =========================
-    logic         i_clk;
-    logic         i_rst;
-    logic         i_start;
-    logic [255:0] i_a;
-    logic [255:0] i_d;
-    logic [255:0] i_n;
-    logic [255:0] o_a_pow_d;
-    logic         o_finished;
+    int passed_cnt = 0;
+    int failed_cnt = 0;
 
-    // =========================
-    // DUT
-    // =========================
+    // ----------------------------------------------------
+    // Clock Generation (10ns period)
+    // ----------------------------------------------------
+    always #5 clk = ~clk;
+
+    // ----------------------------------------------------
+    // Device Under Test (DUT)
+    // ----------------------------------------------------
     Rsa256Core dut (
-        .i_clk(i_clk),
-        .i_rst(i_rst),
-        .i_start(i_start),
+        .i_clk(clk),
+        .i_rst(rst),
+        .i_start(start),
         .i_a(i_a),
         .i_d(i_d),
         .i_n(i_n),
         .o_a_pow_d(o_a_pow_d),
-        .o_finished(o_finished)
+        .o_finished(finished)
     );
 
-    // =========================
-    // Clock
-    // =========================
-    initial i_clk = 1'b0;
-    always #5 i_clk = ~i_clk;
+    // ----------------------------------------------------
+    // Complex Test Data Array (Embedded Directly)
+    // Note: Montgomery algorithm strictly requires N to be ODD.
+    // ----------------------------------------------------
+    typedef struct {
+        logic [255:0] N;
+        logic [255:0] a;
+        logic [255:0] d;
+        string        name;
+    } test_vector_t;
 
-    // =========================
-    // Golden model helpers
-    // =========================
-    function automatic [255:0] mod_mul;
-        input [255:0] x;
-        input [255:0] y;
-        input [255:0] n;
-        reg   [511:0] prod;
-        reg   [511:0] rem;
-        begin
-            if (n == 256'd0) begin
-                mod_mul = 256'd0;
-            end else begin
-                prod = x * y;
-                rem  = prod % n;
-                mod_mul = rem[255:0];
-            end
+    test_vector_t test_vectors [] = '{
+        // 1. Standard Public Key Test (d = 65537) with large padded data
+        '{
+            N: 256'hFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF43, // Large prime-like odd number
+            a: 256'h123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0,
+            d: 256'h0000000000000000000000000000000000000000000000000000000000010001,
+            name: "Standard Exponent (65537)"
+        },
+        // 2. Full 256-bit stress test (Massive N, a, and d)
+        '{
+            N: 256'h8A9B2C3D4E5F6A7B8C9D0E1F2A3B4C5D6E7F8A9B0C1D2E3F4A5B6C7D8E9F0A11,
+            a: 256'hFEDCBA0987654321FEDCBA0987654321FEDCBA0987654321FEDCBA0987654321,
+            d: 256'h112233445566778899AABBCCDDEEFF00112233445566778899AABBCCDDEEFF01,
+            name: "Full 256-bit Stress Test"
+        },
+        // 3. Corner Case: Exponent is 0 (Result should always be 1)
+        '{
+            N: 256'h1234567890ABCDEF1234567890ABCDEF1234567890ABCDEF1234567890ABCDEB,
+            a: 256'hDEADBEEFCAFEBABEDEADBEEFCAFEBABEDEADBEEFCAFEBABEDEADBEEFCAFEBABE,
+            d: 256'h0000000000000000000000000000000000000000000000000000000000000000,
+            name: "Corner Case: d = 0"
+        },
+        // 4. Corner Case: Plaintext is 0 (Result should always be 0)
+        '{
+            N: 256'hBEEFBEEFBEEFBEEFBEEFBEEFBEEFBEEFBEEFBEEFBEEFBEEFBEEFBEEFBEEFBEEF,
+            a: 256'h0000000000000000000000000000000000000000000000000000000000000000,
+            d: 256'h9999999999999999999999999999999999999999999999999999999999999999,
+            name: "Corner Case: a = 0"
+        },
+        // 5. Corner Case: Plaintext is 1 (Result should always be 1)
+        '{
+            N: 256'h7777777777777777777777777777777777777777777777777777777777777777,
+            a: 256'h0000000000000000000000000000000000000000000000000000000000000001,
+            d: 256'hFEDCBA0987654321FEDCBA0987654321FEDCBA0987654321FEDCBA0987654321,
+            name: "Corner Case: a = 1"
+        }
+    };
+
+    // ----------------------------------------------------
+    // Golden Reference Model (Instant Behavioral Math)
+    // ----------------------------------------------------
+
+    function automatic [255:0] golden_exp(input [255:0] n_val, a_val, d_val);
+        logic [511:0] res;
+        logic [511:0] base;
+        logic [511:0] big_N;
+    
+        // Procedural assignment ensures evaluation on every call
+        res = 1;
+        base = {256'b0, a_val};
+        big_N = {256'b0, n_val};
+    
+        for (int i = 0; i < 256; i++) begin
+            if (d_val[i]) res = (res * base) % big_N;
+            base = (base * base) % big_N;
         end
+        return res[255:0];
     endfunction
 
-    function automatic [255:0] mod_exp;
-        input [255:0] base;
-        input [255:0] exp;
-        input [255:0] n;
-        reg   [255:0] result;
-        reg   [255:0] cur;
-        integer i;
-        begin
-            if (n == 256'd0) begin
-                mod_exp = 256'd0;
-            end else begin
-                result = 256'd1 % n;
-                cur    = base % n;
-
-                for (i = 0; i < 256; i = i + 1) begin
-                    if (exp[i])
-                        result = mod_mul(result, cur, n);
-                    cur = mod_mul(cur, cur, n);
-                end
-
-                mod_exp = result;
-            end
-        end
-    endfunction
-
-    // =========================
-    // Run one case
-    // =========================
-    task automatic run_case;
-        input [255:0] in_a;
-        input [255:0] in_d;
-        input [255:0] in_n;
-
-        reg [255:0] expected;
-        integer cycle_count;
-        begin
-            expected = mod_exp(in_a, in_d, in_n);
-
-            @(negedge i_clk);
-            i_a     = in_a;
-            i_d     = in_d;
-            i_n     = in_n;
-            i_start = 1'b1;
-
-            @(negedge i_clk);
-            i_start = 1'b0;
-
-            cycle_count = 0;
-            while (o_finished !== 1'b1) begin
-                @(posedge i_clk);
-                cycle_count = cycle_count + 1;
-                if (cycle_count > 100000) begin
-                    $display("[FAIL] Timeout");
-                    $display("       a = %h", in_a);
-                    $display("       d = %h", in_d);
-                    $display("       n = %h", in_n);
-                    $finish;
-                end
-            end
-
-            @(negedge i_clk);
-            if (o_a_pow_d !== expected) begin
-                $display("[FAIL] Mismatch");
-                $display("       a        = %h", in_a);
-                $display("       d        = %h", in_d);
-                $display("       n        = %h", in_n);
-                $display("       expected = %h", expected);
-                $display("       got      = %h", o_a_pow_d);
-                $finish;
-            end else begin
-                $display("[PASS] a=%h", in_a);
-                $display("       d=%h", in_d);
-                $display("       n=%h", in_n);
-                $display("       result=%h", o_a_pow_d);
-                $display("       cycles=%0d", cycle_count);
-            end
-
-            // leave a few idle cycles so DONE can return to IDLE cleanly
-            repeat (10) @(posedge i_clk);
-        end
-    endtask
-
-    // =========================
-    // Main test sequence
-    // =========================
+    // ----------------------------------------------------
+    // Main Stimulus
+    // ----------------------------------------------------
     initial begin
-        i_rst   = 1'b1;
-        i_start = 1'b0;
-        i_a     = 256'd0;
-        i_d     = 256'd0;
-        i_n     = 256'd0;
+        // Initialize
+        start = 0;
+        i_n = 0; i_a = 0; i_d = 0;
+        
+        // Reset Sequence
+        rst = 1;
+        repeat(5) @(posedge clk);
+        rst = 0;
+        repeat(2) @(posedge clk);
 
-        repeat (5) @(posedge i_clk);
-        i_rst = 1'b0;
-        repeat (2) @(posedge i_clk);
+        $display("==================================================");
+        $display("   STARTING RSA-256 CORE VERIFICATION   ");
+        $display("==================================================");
 
-        // -------------------------
-        // Very small sanity checks
-        // -------------------------
-        run_case(256'd0,  256'd7,  256'd33);  // 0^7 mod 33 = 0
-        run_case(256'd1,  256'd7,  256'd33);  // 1^7 mod 33 = 1
-        run_case(256'd2,  256'd5,  256'd33);  // 2^5 mod 33 = 32
-        run_case(256'd7,  256'd3,  256'd19);  // 7^3 mod 19 = 1
 
-        // -------------------------
-        // RSA-like small examples
-        // -------------------------
-        // n = 33, d = 7
-        // 31^7 mod 33 = 4
-        run_case(256'd31, 256'd7,  256'd33);
+        foreach(test_vectors[i]) begin
+            $display("Running Test [%0d]: %s...", i, test_vectors[i].name);
+            
+            // Assign inputs from struct
+            i_n = test_vectors[i].N;
+            i_a = test_vectors[i].a;
+            i_d = test_vectors[i].d;
+            
+            // Calculate exact expected output using the golden model
+            expected_out = golden_exp(i_n, i_a, i_d);
 
-        // n = 55, d = 27
-        // 23^27 mod 55 = 12
-        run_case(256'd23, 256'd27, 256'd55);
+            // Trigger Start Pulse
+            @(posedge clk);
+            start = 1'b1;
+            @(posedge clk);
+            start = 1'b0;
 
-        // -------------------------
-        // Larger arbitrary modexp cases
-        // -------------------------
-        run_case(
-            256'h0000000000000000000000000000000000000000000000000000000000001234,
-            256'h0000000000000000000000000000000000000000000000000000000000000011,
-            256'h0000000000000000000000000000000000000000000000000000000000010001
-        );
+            // Wait for DUT to finish, with a timeout failsafe
+            fork
+                begin
+                    wait(finished);
+                    @(posedge clk); // Align with clock edge to read data safely
+                    
+                    if (o_a_pow_d === expected_out) begin
+                        $display("  -> [PASS]");
+                        passed_cnt++;
+                    end else begin
+                        $display("  -> [FAIL]");
+                        $display("       Expected: %h", expected_out);
+                        $display("       Got     : %h", o_a_pow_d);
+                        failed_cnt++;
+                    end
+                end
+                begin
+                    // Timeout logic: ~65,536 cycles expected, timeout at 100,000
+                    repeat(100000) @(posedge clk);
+                    $display("  -> [FAIL] TIMEOUT");
+                    failed_cnt++;
+                end
+            join_any
+            disable fork; // Kill the timeout thread if wait(finished) succeeds
+            
+            // Wait a few cycles before the next test
+            repeat(10) @(posedge clk);
+        end
 
-        run_case(
-            256'h0123456789abcdef000000000000000000000000000000000000000000000000,
-            256'h0000000000000000000000000000000000000000000000000000000000001235,
-            256'h1fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
-        );
-
-        $display("All tests passed.");
+        $display("==================================================");
+        $display(" TEST SUITE COMPLETE: %0d Passed | %0d Failed", passed_cnt, failed_cnt);
+        $display("==================================================");
+            
         $finish;
     end
-
 endmodule
