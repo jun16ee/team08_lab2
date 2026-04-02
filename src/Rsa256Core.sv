@@ -257,22 +257,22 @@ module MontAlg (
     output logic o_finished,
     output logic [255:0] o_mont_alg
 );
-    logic [255:0] m_r, m_w;
+    logic [256:0] m_r, m_w;
     logic [255:0] o_mont_alg_w;
     logic [8:0] bit_idx_r, bit_idx_w;
     logic o_finished_w;
-    logic [256:0] sum_mb, sum_mN; // for addition, one more bit for carry
+    logic [257:0] sum_mb, sum_mN; // for addition, one more bit for carry
     // ============== COMB ==============
     always_comb begin
         m_w = m_r;
         bit_idx_w = bit_idx_r;
         o_finished_w = 1'b0;
         o_mont_alg_w = o_mont_alg;
-        sum_mb = 257'b0;
-        sum_mN = 257'b0;
+        sum_mb = 258'b0;
+        sum_mN = 258'b0;
 
         if (i_start) begin
-            m_w = 256'b0;
+            m_w = 257'b0;
             bit_idx_w = 9'b0;
             o_finished_w = 1'b0;
             o_mont_alg_w = 256'b0;
@@ -310,7 +310,7 @@ module MontAlg (
     // ============== SEQ ===============
     always_ff @(posedge i_clk or posedge i_rst) begin
         if(i_rst) begin
-            m_r <= 256'b0;
+            m_r <= 257'b0;
             o_mont_alg <= 256'b0;
             o_finished <= 1'b0;
             bit_idx_r <= 9'b0;
