@@ -279,13 +279,13 @@ module MontAlg (
         end else begin
             if(bit_idx_r < 9'd256) begin
                 if(a[bit_idx_r] == 1'b1) begin
-                    sum_mb = {1'b0, m_r} + {1'b0, b};
+                    sum_mb = {1'b0, m_r} + {2'b0, b};
                 end else begin
                     sum_mb = {1'b0, m_r};
                 end
 
                 if(sum_mb[0]) begin
-                    sum_mN = sum_mb + {1'b0, N};
+                    sum_mN = sum_mb + {2'b0, N};
                 end else begin
                     sum_mN = sum_mb;
                 end
