@@ -16,13 +16,19 @@ localparam TX_OK_BIT   = 6;
 localparam RX_OK_BIT   = 7;
 
 // Feel free to design your own FSM!
-localparam S_GET_KEY = 0;
-localparam S_GET_DATA = 1;
-localparam S_WAIT_CALCULATE = 2;
-localparam S_SEND_DATA = 3;
+// localparam S_GET_KEY = 0;
+// localparam S_GET_DATA = 1;
+// localparam S_WAIT_CALCULATE = 2;
+// localparam S_SEND_DATA = 3;
+typedef enum logic [1:0] {
+    S_GET_KEY,
+    S_GET_DATA,
+    S_WAIT_CALCULATE,
+    S_SEND_DATA,
+} state_t;
 
+state_t state_r, state_w;
 logic [255:0] n_r, n_w, d_r, d_w, enc_r, enc_w, dec_r, dec_w;
-logic [1:0] state_r, state_w;
 logic [6:0] bytes_counter_r, bytes_counter_w;
 logic [4:0] avm_address_r, avm_address_w;
 logic avm_read_r, avm_read_w, avm_write_r, avm_write_w;
@@ -31,6 +37,7 @@ logic rsa_start_r, rsa_start_w;
 logic rsa_finished;
 logic [255:0] rsa_dec;
 
+// output logic
 assign avm_address = avm_address_r;
 assign avm_read = avm_read_r;
 assign avm_write = avm_write_r;
@@ -128,16 +135,23 @@ always_comb begin
                     end
                 end
             end
+
+            S_WAIT_CALCULATE: begin
+                rsa_start_w = 0;
+                if (rsa_finished) begin
+                    state_w = S_SEND_DATA;
+                    dec_w = rsa_dec;
+                end
+            end
         endcase 
     end
-
-    if (state_r == S_WAIT_CALCULATE) begin
-        rsa_start_w = 0;
-        if (rsa_finished) begin
-            state_w = S_SEND_DATA;
-            dec_w = rsa_dec;
-        end
-    end
+    // if (state_r == S_WAIT_CALCULATE) begin
+    //     rsa_start_w = 0;
+    //     if (rsa_finished) begin
+    //         state_w = S_SEND_DATA;
+    //         dec_w = rsa_dec;
+    //     end
+    // end
 end
 
 always_ff @(posedge avm_clk or posedge avm_rst) begin

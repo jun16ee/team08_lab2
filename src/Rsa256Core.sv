@@ -11,10 +11,10 @@ module Rsa256Core (
     typedef enum logic [2:0] {
         IDLE,
         PREP,
-        MONT_START,
-        MONT_WAIT,
+        START,
+        WAIT,
         CALC,
-        DONE
+        // DONE
     } state_t;
 
     state_t state_r, state_w;
@@ -61,17 +61,17 @@ module Rsa256Core (
 
             PREP: begin
                 if(prep_finished) begin
-                    state_w = MONT_START;
+                    state_w = START;
                 end
             end
 
-            MONT_START: begin
+            START: begin
                 mont1_start = 1'b1;
                 mont2_start = 1'b1;
-                state_w = MONT_WAIT;
+                state_w = WAIT;
             end
 
-            MONT_WAIT: begin
+            WAIT: begin
                 if(mont1_finished && mont2_finished) begin
                     state_w = CALC;
                 end
@@ -79,17 +79,17 @@ module Rsa256Core (
 
             CALC: begin
                 if(bit_idx_r == 9'd255) begin
-                    state_w = DONE;
+                    state_w = IDLE;
                 end else begin
                     mont1_start = 1'b1;
                     mont2_start = 1'b1;
-                    state_w = MONT_WAIT;
+                    state_w = WAIT;
                 end
             end
 
-            DONE: begin
-                state_w = IDLE;
-            end
+            // DONE: begin
+            //     state_w = IDLE;
+            // end
 
             default: begin
                 state_w = IDLE;
@@ -142,11 +142,11 @@ module Rsa256Core (
                 end
             end
 
-            MONT_START: begin
+            START: begin
                 // do nothing, wait for mont results
             end
 
-            MONT_WAIT: begin
+            WAIT: begin
                 // do nothing, wait for mont results
             end
 
@@ -164,9 +164,9 @@ module Rsa256Core (
             
             end
 
-            DONE: begin
-               // do nothing
-            end
+            // DONE: begin
+            //    // do nothing
+            // end
 
             default: begin
                 m_w = m_r;
