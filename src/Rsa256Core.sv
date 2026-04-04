@@ -13,7 +13,7 @@ module Rsa256Core (
         PREP,
         START,
         WAIT,
-        CALC,
+        CALC
         // DONE
     } state_t;
 
