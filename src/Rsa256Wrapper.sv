@@ -18,12 +18,12 @@ localparam RX_OK_BIT   = 7;
 // Feel free to design your own FSM!
 // localparam S_GET_KEY = 0;
 // localparam S_GET_DATA = 1;
-// localparam S_WAIT_CALCULATE = 2;
+// localparam S_WAIT_CALC = 2;
 // localparam S_SEND_DATA = 3;
 typedef enum logic [1:0] {
     S_GET_KEY,
     S_GET_DATA,
-    S_WAIT_CALCULATE,
+    S_WAIT_CALC,
     S_SEND_DATA,
 } state_t;
 
@@ -114,7 +114,7 @@ always_comb begin
                     bytes_counter_w = bytes_counter_r - 1;
                     StartRead(STATUS_BASE);
                     if (bytes_counter_r == 0) begin
-                        state_w = S_WAIT_CALCULATE;
+                        state_w = S_WAIT_CALC;
                         bytes_counter_w = 30;
                         rsa_start_w = 1;
                     end
@@ -136,7 +136,7 @@ always_comb begin
                 end
             end
 
-            // S_WAIT_CALCULATE: begin
+            // S_WAIT_CALC: begin
             //     rsa_start_w = 0;
             //     if (rsa_finished) begin
             //         state_w = S_SEND_DATA;
@@ -145,7 +145,7 @@ always_comb begin
             // end
         endcase 
     end
-    if (state_r == S_WAIT_CALCULATE) begin
+    if (state_r == S_WAIT_CALC) begin
         rsa_start_w = 0;
         if (rsa_finished) begin
             state_w = S_SEND_DATA;
