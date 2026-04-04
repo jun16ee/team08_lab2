@@ -136,22 +136,22 @@ always_comb begin
                 end
             end
 
-            S_WAIT_CALCULATE: begin
-                rsa_start_w = 0;
-                if (rsa_finished) begin
-                    state_w = S_SEND_DATA;
-                    dec_w = rsa_dec;
-                end
-            end
+            // S_WAIT_CALCULATE: begin
+            //     rsa_start_w = 0;
+            //     if (rsa_finished) begin
+            //         state_w = S_SEND_DATA;
+            //         dec_w = rsa_dec;
+            //     end
+            // end
         endcase 
     end
-    // if (state_r == S_WAIT_CALCULATE) begin
-    //     rsa_start_w = 0;
-    //     if (rsa_finished) begin
-    //         state_w = S_SEND_DATA;
-    //         dec_w = rsa_dec;
-    //     end
-    // end
+    if (state_r == S_WAIT_CALCULATE) begin
+        rsa_start_w = 0;
+        if (rsa_finished) begin
+            state_w = S_SEND_DATA;
+            dec_w = rsa_dec;
+        end
+    end
 end
 
 always_ff @(posedge avm_clk or posedge avm_rst) begin
