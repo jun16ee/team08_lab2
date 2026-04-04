@@ -27,6 +27,9 @@ for i in range(0, len(enc), 32):
     dec = s.read(31)
     fp_dec.write(dec)
 
+end_marker = b'\xff' * 32
+s.write(end_marker)
+
 fp_key.close()
 fp_enc.close()
 fp_dec.close()

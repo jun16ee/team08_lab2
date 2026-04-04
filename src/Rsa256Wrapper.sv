@@ -114,9 +114,14 @@ always_comb begin
                     bytes_counter_w = bytes_counter_r - 1;
                     StartRead(STATUS_BASE);
                     if (bytes_counter_r == 0) begin
-                        state_w = S_WAIT_CALC;
-                        bytes_counter_w = 30;
-                        rsa_start_w = 1;
+                        if (&enc_w) begin 
+                            state_w = S_GET_KEY;
+                            bytes_counter_w = 63;
+                        end else begin
+                            state_w = S_WAIT_CALC;
+                            bytes_counter_w = 30;
+                            rsa_start_w = 1;
+                        end
                     end
                 end
             end
