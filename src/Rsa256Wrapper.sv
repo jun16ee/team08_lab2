@@ -24,7 +24,7 @@ typedef enum logic [1:0] {
     S_GET_KEY,
     S_GET_DATA,
     S_WAIT_CALC,
-    S_SEND_DATA,
+    S_SEND_DATA
 } state_t;
 
 state_t state_r, state_w;
